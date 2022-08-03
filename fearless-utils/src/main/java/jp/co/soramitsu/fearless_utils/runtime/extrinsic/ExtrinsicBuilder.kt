@@ -1,7 +1,6 @@
 package jp.co.soramitsu.fearless_utils.runtime.extrinsic
 
 import jp.co.soramitsu.fearless_utils.encrypt.SignatureWrapper
-import jp.co.soramitsu.fearless_utils.hash.Hasher.blake2b256
 import jp.co.soramitsu.fearless_utils.runtime.AccountId
 import jp.co.soramitsu.fearless_utils.runtime.RuntimeSnapshot
 import jp.co.soramitsu.fearless_utils.runtime.definitions.types.RuntimeType
@@ -19,18 +18,14 @@ import jp.co.soramitsu.fearless_utils.runtime.definitions.types.instances.Addres
 import jp.co.soramitsu.fearless_utils.runtime.definitions.types.instances.SignatureInstanceConstructor
 import jp.co.soramitsu.fearless_utils.runtime.definitions.types.toHex
 import jp.co.soramitsu.fearless_utils.runtime.definitions.types.toHexUntyped
-import jp.co.soramitsu.fearless_utils.runtime.definitions.types.useScaleWriter
 import jp.co.soramitsu.fearless_utils.runtime.extrinsic.signer.Signer
-import jp.co.soramitsu.fearless_utils.runtime.extrinsic.signer.SignerPayloadRaw
+import jp.co.soramitsu.fearless_utils.runtime.extrinsic.signer.SignerPayloadExtrinsic
 import jp.co.soramitsu.fearless_utils.runtime.metadata.call
 import jp.co.soramitsu.fearless_utils.runtime.metadata.module
-import jp.co.soramitsu.fearless_utils.scale.utils.directWrite
 import jp.co.soramitsu.fearless_utils.wsrpc.request.runtime.chain.RuntimeVersion
 import java.math.BigInteger
 
 private val DEFAULT_TIP = BigInteger.ZERO
-
-private const val PAYLOAD_HASH_THRESHOLD = 256
 
 class SignedExtension(val name: String, val type: Type<*>)
 
@@ -169,27 +164,15 @@ class ExtrinsicBuilder(
             AdditionalExtras.TX_VERSION to runtimeVersion.transactionVersion.toBigInteger()
         )
 
-        val payloadBytes = useScaleWriter {
-            when (callRepresentation) {
-                is CallRepresentation.Instance ->
-                    GenericCall.encode(this, runtime, callRepresentation.call)
-
-                is CallRepresentation.Bytes ->
-                    directWrite(callRepresentation.bytes)
-            }
-
-            extrinsicType.signedExtrasType.encode(this, runtime, signedExtrasInstance)
-            AdditionalExtras.default.encode(this, runtime, additionalExtrasInstance)
-        }
-
-        val messageToSign = if (payloadBytes.size > PAYLOAD_HASH_THRESHOLD) {
-            payloadBytes.blake2b256()
-        } else {
-            payloadBytes
-        }
-
-        val signerPayload = SignerPayloadRaw(messageToSign, accountId, skipMessageHashing = false)
-        val signatureWrapper = signer.signRaw(signerPayload)
+        val signerPayload = SignerPayloadExtrinsic(
+            runtime = runtime,
+            extrinsicType = extrinsicType,
+            accountId = accountId,
+            call = callRepresentation,
+            signedExtras = signedExtrasInstance,
+            additionalExtras = additionalExtrasInstance,
+        )
+        val signatureWrapper = signer.signExtrinsic(signerPayload)
 
         return signatureConstructor.constructInstance(runtime.typeRegistry, signatureWrapper)
     }

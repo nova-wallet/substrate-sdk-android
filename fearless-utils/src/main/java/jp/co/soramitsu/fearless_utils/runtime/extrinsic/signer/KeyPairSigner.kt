@@ -10,6 +10,12 @@ class KeyPairSigner(
     private val encryption: MultiChainEncryption
 ) : Signer {
 
+    override suspend fun signExtrinsic(payloadExtrinsic: SignerPayloadExtrinsic): SignatureWrapper {
+        val messageToSign = payloadExtrinsic.encodedSignaturePayload(hashBigPayloads = true)
+
+        return MessageSigner.sign(encryption, messageToSign, keypair, skipHashing = false)
+    }
+
     override suspend fun signRaw(payload: SignerPayloadRaw): SignatureWrapper {
         return MessageSigner.sign(encryption, payload.message, keypair, payload.skipMessageHashing)
     }
